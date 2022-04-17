@@ -1,0 +1,91 @@
+import matplotlib as plt
+import numpy as np
+import cv2
+import math
+import matplotlib.pyplot as pltp
+from skimage.filters import threshold_otsu
+
+cap = cv2.VideoCapture('5.mp4')
+cap.set(10,160)
+
+while True:
+    if 1:success, img = cap.read()
+
+    img = cv2.resize(img, (426, 240))
+    image = img
+
+    #Crop Region of Interest
+    height, width, channels = img.shape
+    descentre = 0
+    rows_to_watch = 240
+    crop_img = img[(height) // 2 + descentre:(height) // 2 + (descentre + rows_to_watch)][1:width]
+
+    #Change image color
+    rgb = cv2.cvtColor(crop_img,cv2.COLOR_BGR2RGB)
+    hsv = cv2.cvtColor(crop_img,cv2.COLOR_BGR2HSV)
+
+    #Preprocessing
+    blur = cv2.GaussianBlur(rgb,(5,5),cv2.BORDER_DEFAULT)
+    gray = cv2.cvtColor(blur, cv2.COLOR_RGB2GRAY)
+    _, thresh = cv2.threshold(gray, np.mean(gray), 255, cv2.THRESH_BINARY)
+
+    #Detect color
+    upper_green = np.array([86, 255, 255])
+    lower_green = np.array([25, 0, 0])
+    mask = cv2.inRange(hsv, lower_green, upper_green)
+    bitwise = cv2.bitwise_and(crop_img, crop_img, mask=mask)
+    blur1 = cv2.GaussianBlur(bitwise,(5,5),cv2.BORDER_DEFAULT)
+
+
+    # Perform morpholgical operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+    close = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel, iterations=1)
+    close[np.where(mask != 0)] = 0
+
+
+    mask0 = mask + close
+
+    kernel = np.ones((3, 3), np.uint8)
+    img_erosion = cv2.erode(close, kernel, iterations=2)
+    edges = cv2.Canny(img_erosion, 50, 150)
+
+    lines = cv2.HoughLinesP(
+        edges,
+        rho=6,
+        theta=np.pi / 60,
+        threshold=160,
+        lines=np.array([]),
+        minLineLength=40,
+        maxLineGap=25
+    )
+    #print(lines)
+
+    # Compute the centroid of the blob
+    m = cv2.moments(img_erosion, False)
+    try:
+        cx, cy = m['m10'] / m['m00'], m['m01'] / m['m00']
+    except ZeroDivisionError:
+        cy, cx = height / 2, width / 2
+
+    cv2.circle(img_erosion, (int(cx), int(cy)), 5, (10, 10, 255), 2)
+    print(m)
+
+    cv2.imshow("original",image)
+    cv2.imshow("Cropped",crop_img)
+    cv2.imshow("Blur",blur)
+    cv2.imshow("Gray",gray)
+    cv2.imshow("threshold",thresh)
+
+    cv2.imshow("Color",blur1)
+    cv2.imshow("Combine",mask0)
+
+
+    cv2.imshow("eroded",img_erosion)
+    cv2.imshow("Canny",edges)
+
+
+    if cv2.waitKey(1) & 0xFF == ord('s'):
+
+        cv2.waitKey(300)
+        count += 1
